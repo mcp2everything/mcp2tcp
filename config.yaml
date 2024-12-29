@@ -10,15 +10,20 @@ tcp:
 commands:
   # PWM控制命令
   set_pwm:
-    command: "CMD_PWM {frequency}"  # 实际发送的命令格式，server会自动添加\r\n
+    command: "CMD_PWM {frequency}"  # frequency为0-100的整数，表示PWM占空比
     need_parse: false  # 不需要解析响应内容
     data_type: "ascii"  # 数据类型，ascii或hex
+    parameters:
+      - name: "frequency"
+        type: "integer"
+        description: "PWM frequency value (0-100)"
+        required: true
     prompts:
-      - "把PWM调到最大"
-      - "把PWM调到最小"
-      - "请将PWM设置为{value}"
-      - "关闭PWM"
-      - "把PWM调到一半"
+      - "把PWM调到最大 (frequency=100)"
+      - "把PWM调到最小 (frequency=0)"
+      - "请将PWM设置为{frequency} (0-100的整数)"
+      - "关闭PWM (frequency=0)"
+      - "把PWM调到一半 (frequency=50)"
 
   # PICO信息查询命令
   get_pico_info:
@@ -31,10 +36,16 @@ commands:
 
   # LED控制命令示例
   led_control:
-    command: "CMD_LED {state}"  # state可以是on/off或其他值，server会自动添加\r\n
+    command: "CMD_LED {state}"  # state必须是on或off
     need_parse: false
     data_type: "ascii"  # 数据类型，ascii或hex
+    parameters:
+      - name: "state"
+        type: "string"
+        description: "LED state ('on' or 'off')"
+        required: true
+        enum: ["on", "off"]
     prompts:
-      - "打开LED"
-      - "关闭LED"
-      - "设置LED状态为{state}"
+      - "打开LED (state=on)"
+      - "关闭LED (state=off)"
+      - "设置LED状态为{state} (on或off)"

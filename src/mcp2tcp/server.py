@@ -50,14 +50,152 @@ logger = logging.getLogger(__name__)
 # 添加版本号常量
 VERSION = "0.1.0"  # 添加了自动\r\n和更详细的错误信息
 
+# 创建MCP服务器实例
 server = Server("mcp2tcp")
+config = None
+
+@server.list_tools()
+async def handle_list_tools() -> List[types.Tool]:
+    """List available tools."""
+    if config is None:
+        return []
+        
+    tools = []
+    for cmd_id, command in config.commands.items():
+        # 从命令字符串中提取命令名（去掉CMD_前缀）
+        cmd_name = command.command.split()[0].replace("CMD_", "").lower()
+        
+        # 构建参数描述
+        properties = {}
+        required = []
+        
+        # 使用配置文件中的参数定义
+        if hasattr(command, 'parameters'):
+            for param in command.parameters:
+                properties[param['name']] = {
+                    "type": param['type'],
+                    "description": param['description'],
+                    **({"enum": param['enum']} if 'enum' in param else {})
+                }
+                if param.get('required', False):
+                    required.append(param['name'])
+        else:
+            # 如果没有参数定义，从命令字符串中提取
+            import re
+            param_names = re.findall(r'\{(\w+)\}', command.command)
+            for param_name in param_names:
+                properties[param_name] = {
+                    "type": "string",
+                    "description": f"Parameter {param_name} for the {cmd_name} command",
+                    "examples": [p.format(**{param_name: "value"}) for p in command.prompts if "{" + param_name + "}" in p]
+                }
+                required.append(param_name)
+
+        tool = types.Tool(
+            name=cmd_name,  # 使用命令名作为工具名
+            description=command.prompts[0] if command.prompts else f"Execute {cmd_name} command",
+            inputSchema={
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False
+            }
+        )
+        tools.append(tool)
+        logger.debug(f"Registered tool: {cmd_name} with parameters: {properties}")
+    
+    return tools
+
+@server.call_tool()
+async def handle_call_tool(name: str, arguments: Dict[str, Any] | None) -> List[types.TextContent]:
+    """Handle tool execution requests."""
+    if config is None:
+        return [types.TextContent(
+            type="text",
+            text="Error: Configuration not loaded"
+        )]
+        
+    try:
+        logger.info(f"Tool call received - Name: {name}, Arguments: {arguments}")
+        
+        # 查找对应的命令
+        cmd_found = None
+        for cmd_id, command in config.commands.items():
+            cmd_name = command.command.split()[0].replace("CMD_", "").lower()
+            if cmd_name == name:
+                cmd_found = command
+                break
+        
+        if cmd_found is None:
+            error_msg = f"Error: Unknown tool '{name}'\n"
+            error_msg += "Please check:\n"
+            error_msg += "1. Tool name is correct\n"
+            error_msg += "2. Tool is configured in config.yaml"
+            logger.error(error_msg)
+            return [types.TextContent(
+                type="text",
+                text=error_msg
+            )]
+
+        if arguments is None:
+            arguments = {}
+        
+        # 验证必需的参数
+        import re
+        param_names = re.findall(r'\{(\w+)\}', cmd_found.command)
+        missing_params = [param for param in param_names if param not in arguments]
+        if missing_params:
+            error_msg = f"Error: Missing required parameters: {', '.join(missing_params)}\n"
+            error_msg += "Please provide all required parameters."
+            logger.error(error_msg)
+            return [types.TextContent(
+                type="text",
+                text=error_msg
+            )]
+        
+        # 发送命令并等待响应
+        try:
+            response = tcp_connection.send_command(cmd_found, arguments)
+            logger.debug(f"Command response: {response}")
+            return response
+        except ConnectionError as e:
+            error_msg = f"Error: Connection failed - {str(e)}\n"
+            error_msg += "Please check:\n"
+            error_msg += "1. TCP server is running\n"
+            error_msg += "2. Connection settings are correct"
+            logger.error(error_msg)
+            return [types.TextContent(
+                type="text",
+                text=error_msg
+            )]
+        except TimeoutError as e:
+            error_msg = f"Error: Command timeout - {str(e)}\n"
+            error_msg += "Please check:\n"
+            error_msg += "1. Device is responding\n"
+            error_msg += "2. Timeout settings are appropriate"
+            logger.error(error_msg)
+            return [types.TextContent(
+                type="text",
+                text=error_msg
+            )]
+        
+    except Exception as e:
+        error_msg = f"Error: {str(e)}\n"
+        error_msg += "Please check:\n"
+        error_msg += "1. Configuration is correct\n"
+        error_msg += "2. Device is functioning properly"
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        return [types.TextContent(
+            type="text",
+            text=error_msg
+        )]
 
 @dataclass
 class Command:
     """Configuration for a serial command."""
     command: str
     need_parse: bool
-    data_type: str  # 新增：数据类型
+    data_type: str
     prompts: List[str]
 
 @dataclass
@@ -76,74 +214,57 @@ class Config:
     @staticmethod
     def load(config_path: str = "config.yaml") -> 'Config':
         """Load configuration from YAML file."""
-        # 获取配置文件名
-        config_name = os.path.basename(config_path)
-        # 定义可能的配置文件位置
-        config_paths = [
-            config_path,  # 首先检查指定的路径
-            os.path.join(os.getcwd(), config_name),  # 当前工作目录
-            os.path.expanduser(f"~/.mcp2tcp/{config_name}"),  # 用户主目录
-        ]
-        
-        # 添加系统级目录
-        if os.name == 'nt':  # Windows
-            config_paths.append(os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"),
-                                           "mcp2tcp", config_name))
-        else:  # Linux/Mac
-            config_paths.append(f"/etc/mcp2tcp/{config_name}")
-
-        # 尝试从每个位置加载配置
-        for path in config_paths:
-            if (os.path.exists(path)):
-                try:
-                    with open(path, 'r', encoding='utf-8') as f:
-                        config_data = yaml.safe_load(f)
-                    logger.info(f"Loading configuration from {path}")
-                    
-                    # Load TCP configuration
-                    tcp_config = config_data.get('tcp', {})
-                    config = Config(
-                        remote_ip=tcp_config.get('remote_ip'),
-                        port=tcp_config.get('port', 12345),
-                        connect_timeout=tcp_config.get('connect_timeout', 3.0),
-                        receive_timeout=tcp_config.get('receive_timeout', 3.0),
-                        response_start_string=tcp_config.get('response_start_string', 'OK'),  # 新增：加载应答开始字符串
-                        communication_type=tcp_config.get('communication_type', 'client')  # 新增：加载通信类型
-                    )
-
-                    # Load commands
-                    commands_data = config_data.get('commands', {})
-                    for cmd_id, cmd_data in commands_data.items():
-                        raw_command = cmd_data.get('command', '')
-                        logger.debug(f"Loading command {cmd_id}: {repr(raw_command)}")
-                        config.commands[cmd_id] = Command(
-                            command=raw_command,
-                            need_parse=cmd_data.get('need_parse', False),
-                            data_type=cmd_data.get('data_type', 'ascii'),  # 新增：加载数据类型
-                            prompts=cmd_data.get('prompts', [])
-                        )
-                        logger.debug(f"Loaded command {cmd_id}: {repr(config.commands[cmd_id].command)}")
-
-                    return config
-                except Exception as e:
-                    logger.warning(f"Error loading config from {path}: {e}")
-                    continue
-
-        logger.info("No valid config file found, using defaults")
-        return Config()
-
-config = Config.load()
+        try:
+            logger.info(f"Opening configuration file: {config_path}")
+            with open(config_path, 'r') as f:
+                data = yaml.safe_load(f)
+                logger.info("Successfully parsed YAML configuration")
+            
+            # 加载 TCP 配置
+            tcp_config = data.get('tcp', {})
+            logger.info("Loading TCP configuration...")
+            config = Config(
+                remote_ip=tcp_config.get('remote_ip'),
+                port=tcp_config.get('port', 12345),
+                connect_timeout=tcp_config.get('connect_timeout', 3.0),
+                receive_timeout=tcp_config.get('receive_timeout', 3.0),
+                response_start_string=tcp_config.get('response_start_string', 'OK'),
+                communication_type=tcp_config.get('communication_type', 'client')
+            )
+            logger.info("TCP configuration loaded")
+            
+            # 加载命令配置
+            logger.info("Loading commands configuration...")
+            commands_count = 0
+            for cmd_id, cmd_data in data.get('commands', {}).items():
+                logger.info(f"Loading command: {cmd_id}")
+                raw_command = cmd_data.get('command', '')
+                logger.debug(f"Command string: '{raw_command}'")
+                config.commands[cmd_id] = Command(
+                    command=raw_command,
+                    need_parse=cmd_data.get('need_parse', False),
+                    data_type=cmd_data.get('data_type', 'ascii'),
+                    prompts=cmd_data.get('prompts', [])
+                )
+                commands_count += 1
+            logger.info(f"Loaded {commands_count} commands")
+            
+            return config
+            
+        except Exception as e:
+            logger.error(f"Error loading config: {e}")
+            raise
 
 class TCPConnection:
     """TCP connection manager."""
     
     def __init__(self):
         self.socket: Optional[socket.socket] = None
-        self.remote_ip: str = config.remote_ip
-        self.port: int = config.port
-        self.connect_timeout: float = config.connect_timeout
-        self.receive_timeout: float = config.receive_timeout * 5  # 增加接收超时时间
-        self.response_start_string: str = config.response_start_string
+        self.remote_ip: str = None
+        self.port: int = None
+        self.connect_timeout: float = None
+        self.receive_timeout: float = None
+        self.response_start_string: str = None
 
     def connect(self) -> bool:
         """Attempt to connect to the TCP server."""
@@ -252,121 +373,58 @@ def send_command(command, arguments):
     print(f"Received response: {response}")
     return response
 
-@server.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
-    """List available tools for the MCP service."""
-    logger.info("Listing available tools")
-    tools = []
-    
-    for cmd_id, command in config.commands.items():
-        # 从命令字符串中提取参数名
-        import re
-        param_names = re.findall(r'\{(\w+)\}', command.command)
-        properties = {name: {"type": "string"} for name in param_names}
-        
-        tools.append(types.Tool(
-            name=cmd_id,
-            description=f"Execute {cmd_id} command",
-            inputSchema={
-                "type": "object",
-                "properties": properties,
-                "required": param_names
-            },
-            prompts=command.prompts
-        ))
-    
-    return tools
-
-@server.call_tool()
-async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
-    """Handle tool execution requests according to MCP protocol."""
-    logger.info(f"Tool call received - Name: {name}, Arguments: {arguments}")
-    
-    try:
-        if name not in config.commands:
-            error_msg = f"[mcp2tcp v{VERSION}] Error: Unknown tool '{name}'\n"
-            error_msg += "Please check:\n"
-            error_msg += "1. Tool name is correct\n"
-            error_msg += "2. Tool is configured in config.yaml"
-            return [types.TextContent(
-                type="text",
-                text=error_msg
-            )]
-
-        command = config.commands[name]
-        if arguments is None:
-            arguments = {}
-        
-        # 发送命令并返回 MCP 格式的响应
-        return tcp_connection.send_command(command, arguments)
-
-    except Exception as e:
-        logger.error(f"Error handling tool call: {str(e)}")
-        error_msg = f"[mcp2tcp v{VERSION}] Error: {str(e)}\n"
-        error_msg += "Please check:\n"
-        error_msg += "1. Configuration is correct\n"
-        error_msg += "2. Device is functioning properly"
-        return [types.TextContent(
-            type="text",
-            text=error_msg
-        )]
-
 async def main(config_name: str = None) -> None:
     """Run the MCP server.
     
     Args:
         config_name: Optional configuration name. If not provided, uses default config.yaml
     """
-    logger.info("Starting mcp2tcp server")
-    
-    # 处理配置文件名
-    if config_name and config_name != "default":
-        if not config_name.endswith("_config.yaml"):
-            config_name = f"{config_name}_config.yaml"
-    else:
-        config_name = "config.yaml"
-        
-    # 加载配置
-    global config
-    config = Config.load(config_name)
-    # communication_type = config.communication_type
-    # for command in config.commands.values():
-    #     logger.info(f"Loaded command: {command.command}")
-    #     if communication_type == "client":
-    #         pass
-    #     elif communication_type == "server":
-    #         pass
-    #     arguments = {}
-    #     # 判断字符串是否以 "PWM" 开头
-    #     if "PWM" in command.command:
-    #         # 示例参数
-    #         arguments = {"frequency": 1000}
-    #     if "LED" in command.command:
-    #         # 示例参数
-    #         arguments = {"state": 1}
-    #     # 发送命令
-    #     response = send_command(command, arguments)
-    #     print(response)
     try:
+        # 加载配置
+        config_path = config_name if config_name else "config.yaml"
+        if not os.path.isfile(config_path):
+            config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config.yaml')
+        
+        logger.info(f"Loading configuration from {config_path}")
+        if not os.path.isfile(config_path):
+            logger.error(f"Configuration file not found: {config_path}")
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+            
+        global config
+        config = Config.load(config_path)
+        logger.info("Configuration loaded successfully")
+        logger.info(f"TCP Remote IP: {config.remote_ip}")
+        logger.info(f"TCP Port: {config.port}")
+        logger.info(f"Available commands: {list(config.commands.keys())}")
+        
+        tcp_connection.remote_ip = config.remote_ip
+        tcp_connection.port = config.port
+        tcp_connection.connect_timeout = config.connect_timeout
+        tcp_connection.receive_timeout = config.receive_timeout * 5  # 增加接收超时时间
+        tcp_connection.response_start_string = config.response_start_string
+        
+        # 运行 MCP 服务器
+        logger.info("Starting MCP server...")
         async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
             await server.run(
                 read_stream,
                 write_stream,
                 InitializationOptions(
                     server_name="mcp2tcp",
-                    server_version=VERSION,
+                    server_version="0.1.0",
                     capabilities=server.get_capabilities(
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},
                     ),
                 ),
             )
+            
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt")
     except Exception as e:
-        logger.error(f"Server error: {e}")
-    finally:
-        tcp_connection.close()
+        logger.error(f"Error in main: {e}")
+        raise
 
-# 示例调用
 if __name__ == "__main__":
     import sys
     config_name = sys.argv[1] if len(sys.argv) > 1 else None
