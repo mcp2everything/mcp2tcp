@@ -1,9 +1,9 @@
 ### **Contribution Guide**  
 
-Thank you for your interest and support for the **MCP2serial** project! We welcome your contributions. This guide will help you get started quickly and collaborate effectively.  
+Thank you for your interest and support for the **mcp2tcp** project! We welcome your contributions. This guide will help you get started quickly and collaborate effectively.  
 
 #### **Project Philosophy**  
-The core goal of MCP2serial is to enable a **“zero-code”** experience for users. Through simple **configuration files**, users can:  
+The core goal of mcp2tcp is to enable a **“zero-code”** experience for users. Through simple **configuration files**, users can:  
 - Map prompts to serial port commands;  
 - Enable natural language interaction with devices.  
 
@@ -18,8 +18,8 @@ We are committed to making the project accessible to all users without requiring
 
 2. **Clone the Repository**  
    ```bash
-   git clone https://github.com/mcp2everything/MCP2serial.git
-   cd MCP2serial
+   git clone https://github.com/mcp2everything/mcp2tcp.git
+   cd mcp2tcp
    ```  
 
 3. **Create a New Branch**  

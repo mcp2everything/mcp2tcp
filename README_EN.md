@@ -1,12 +1,12 @@
-# MCP2Serial Service
+# mcp2tcp Service
 
 English | [简体中文](README.md)
 
 <div align="center">
-    <img src="docs/images/logo.png" alt="MCP2Serial Logo" width="200"/>
+    <img src="docs/images/logo.png" alt="mcp2tcp Logo" width="200"/>
 </div>
 
-MCP2Serial is a serial communication server based on the MCP service interface protocol, designed for communication with serial devices. It provides a simple configuration approach for defining and managing serial commands.
+mcp2tcp is a serial communication server based on the MCP service interface protocol, designed for communication with serial devices. It provides a simple configuration approach for defining and managing serial commands.
 
 ## Features
 
@@ -24,15 +24,15 @@ MCP2Serial is a serial communication server based on the MCP service interface p
 ## System Architecture
 
 <div align="center">
-    <img src="docs/images/stru_eng.png" alt="System Architecture" width="800"/>
-    <p>MCP2Serial System Architecture</p>
+    <img src="docs/images/stru_chs.png" alt="System Architecture" width="800"/>
+    <p>mcp2tcp System Architecture</p>
 </div>
 
 ## Workflow
 
 <div align="center">
-    <img src="docs/images/workflow_eng.png" alt="Workflow Diagram" width="800"/>
-    <p>MCP2Serial Workflow Diagram</p>
+    <img src="docs/images/workflow_chs.png" alt="Workflow Diagram" width="800"/>
+    <p>mcp2tcp Workflow Diagram</p>
 </div>
 
 ## Quick Start
@@ -139,18 +139,117 @@ The program searches for the configuration file in this order and uses the first
 Configure serial port and commands in `config.yaml`:
 ```yaml
 # config.yaml
-serial:
-  port: COM11  # or auto-detect
-  baud_rate: 115200
+tcp:
+  # TCP服务器配置
+  remote_ip: "127.0.0.1"  # 远端IP地址
+  port: 9999  # 端口号
+  connect_timeout: 3.0  # 连接超时时间，单位为秒
+  receive_timeout: 2.0  # 接收超时时间，单位为秒
+  communication_type: "client"  # 通信类型，client或server
+  response_start_string: "CMD"  # 可选，TCP应答的开始字符串，默认为OK
 
 commands:
+  # PWM控制命令
   set_pwm:
-    command: "PWM {frequency}\n"
-    need_parse: false
+    command: "CMD_PWM {frequency}"  # frequency为0-100的整数，表示PWM占空比
+    need_parse: false  # 不需要解析响应内容
+    data_type: "ascii"  # 数据类型，ascii或hex
+    parameters:
+      - name: "frequency"
+        type: "integer"
+        description: "PWM frequency value (0-100)"
+        required: true
     prompts:
-      - "Set PWM to {value}%"
+      - "把PWM调到最大 (frequency=100)"
+      - "把PWM调到最小 (frequency=0)"
+      - "请将PWM设置为{frequency} (0-100的整数)"
+      - "关闭PWM (frequency=0)"
+      - "把PWM调到一半 (frequency=50)"
 ```
 
+### Testing
+
+Before using the service in production, it's recommended to test it to ensure everything works correctly.
+
+#### 1. Start the Test Server
+
+First, start the TCP server in the tests directory to simulate a hardware device:
+
+```bash
+# Go to the tests directory
+cd tests
+
+# Start the test server
+python tcp_server.py
+```
+
+The server will start locally, listening on port 9999. You should see output like this:
+```
+TCP server started on 127.0.0.1:9999
+Waiting for connections...
+```
+
+#### 2. Start the MCP Server
+
+Open a new terminal window and start the MCP server:
+
+```bash
+# Make sure you're in the project root directory
+mcp2tcp
+```
+
+The server will start and load the configuration file. You should see output like this:
+```
+Loading configuration from config.yaml
+Configuration loaded successfully
+TCP Remote IP: 127.0.0.1
+TCP Port: 9999
+Available commands: ['set_pwm', 'get_pico_info', 'led_control']
+Starting MCP server...
+```
+
+#### 3. Test Commands
+
+Now you can use an MCP protocol-compatible client (like Claude Desktop or Cline) to test the following commands:
+
+1. PWM Control:
+   ```
+   Set PWM to maximum
+   Set PWM to minimum
+   Set PWM to 50
+   ```
+
+2. LED Control:
+   ```
+   Turn on LED
+   Turn off LED
+   ```
+
+3. Device Information:
+   ```
+   Get Pico board info
+   ```
+
+#### 4. Verify Results
+
+- In the test server terminal window, you should see the received commands
+- In the MCP server terminal window, you should see the command execution status
+- In your client, you should see the command execution results
+
+#### 5. Common Issues
+
+1. If you see a "Connection refused" error:
+   - Check if the test server is running
+   - Verify that port 9999 is not being used by another program
+
+2. If you see an "Unknown tool" error:
+   - Check if the configuration file is loaded correctly
+   - Verify that command names match the configuration file
+
+3. If you see an "Invalid parameter" error:
+   - Check if the parameter format is correct
+   - PWM frequency must be an integer between 0 and 100
+   - LED state must be either "on" or "off"
 
 3.MCP json Configuration
 Add the following to your MCP client (like Claude Desktop or Cline) configuration file, making sure to update the path to your actual installation path:
@@ -205,10 +304,6 @@ Once the service is running, you can control PWM through natural language conver
 Claude will understand your intent and automatically invoke the appropriate commands. No need to remember specific command formats - just express your needs in natural language.
 
 <div align="center">
-    <img src="docs/images/pwm.png" alt="Cline Configuration Example" width="600"/>
-    <p> Example in Claude</p>
-</div>
-<div align="center">
     <img src="docs/images/test_output.png" alt="Cline Configuration Example" width="600"/>
     <p>Example in Cline</p>
 </div>
@@ -232,30 +327,9 @@ commands:
       - "Turn off LED"
 ```
 
-### 2. Command with Response Parsing
-```yaml
-commands:
-  get_temperature:
-    command: "GET_TEMP\n"
-    need_parse: true
-    prompts:
-      - "Get temperature"
-```
-
-Response example:
-```python
-{
-    "status": "success",
-    "result": {
-        "raw": "OK TEMP=25.5"
-    }
-}
-```
-
 ## Requirements
 
 - Python 3.11+
-- pyserial
 - mcp
 
 ## Installation from source code
@@ -315,12 +389,6 @@ Please make sure to update tests as appropriate.
    uv pip install -e ".[dev]"
    ```
 
-### Running Tests
-
-```bash
-uv pytest tests/
-```
-
 ## License
 
 [MIT](LICENSE)
@@ -328,11 +396,9 @@ uv pytest tests/
 ## Acknowledgments
 
 - Thanks to the [Claude](https://claude.ai) team for the MCP protocol
-- [pySerial](https://github.com/pyserial/pyserial) for serial communication
 - All contributors and users of this project
 
 ## Support
-
 If you encounter any issues or have questions:
 1. Check the [Issues](https://github.com/mcp2everything/mcp2tcp/issues) page
 2. Read our [Wiki](https://github.com/mcp2everything/mcp2tcp/wiki)

@@ -70,7 +70,7 @@ def create_config():
 
     if not config_file.exists():
         config_content = """serial:
-  port: /dev/tty.usbserial-*  # 串口设备名，支持通配符
+  port: /dev/tty.usbserial-*  # TCP设备名，支持通配符
   baud_rate: 115200
 
 commands:
@@ -83,7 +83,7 @@ commands:
 """
         config_file.write_text(config_content, encoding='utf-8')
         print(f"✅ 创建配置文件: {config_file}")
-        print("⚠️ 请修改配置文件中的串口设备名为实际值")
+        print("⚠️ 请修改配置文件中的TCP设备名为实际值")
     else:
         print(f"ℹ️ 配置文件已存在: {config_file}")
 
@@ -116,9 +116,9 @@ def check_and_configure_claude():
         }
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
-        print("✅ 已添加mcp2serial配置到Claude")
+        print("✅ 已添加mcp2tcp配置到Claude")
     else:
-        print("ℹ️ Claude已配置mcp2serial")
+        print("ℹ️ Claude已配置mcp2tcp")
 
 def check_vscode():
     """检查VSCode安装"""
@@ -138,24 +138,24 @@ def check_vscode():
         print("ℹ️ 未检测到VSCode安装")
 
 def check_serial_devices():
-    """检查串口设备"""
+    """检查TCP设备"""
     devices = list(Path("/dev").glob("tty.usbserial-*"))
     if devices:
-        print("\n检测到以下串口设备：")
+        print("\n检测到以下TCP设备：")
         for device in devices:
             print(f"- {device}")
         print("💡 请在配置文件中使用正确的设备名")
     else:
-        print("\n⚠️ 未检测到串口设备，请确保：")
+        print("\n⚠️ 未检测到TCP设备，请确保：")
         print("1. 设备已正确连接")
-        print("2. 已安装串口驱动")
-        print("💡 常用串口芯片驱动：")
+        print("2. 已安装TCP驱动")
+        print("💡 常用TCP芯片驱动：")
         print("- CH340/CH341: https://www.wch.cn/downloads/CH341SER_MAC_ZIP.html")
         print("- CP210x: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers")
         print("- FTDI: https://ftdichip.com/drivers/vcp-drivers/")
 
 def main():
-    print("=== MCP2Serial MacOS 安装程序 ===")
+    print("=== mcp2tcp MacOS 安装程序 ===")
     
     # 1. 检查操作系统
     system = check_os()
@@ -178,18 +178,18 @@ def main():
     # 7. 检查VSCode
     check_vscode()
     
-    # 8. 检查串口设备
+    # 8. 检查TCP设备
     check_serial_devices()
     
     print("\n✨ 安装完成！")
     print("📝 请确保：")
-    print("1. 修改配置文件中的串口设备名")
+    print("1. 修改配置文件中的TCP设备名")
     print("2. 检查Claude或VSCode的MCP服务器配置")
     print("3. 重启Claude或VSCode以使配置生效")
     print("\n💡 提示：")
     print("- mcp2tcp 将在首次运行时自动下载")
-    print("- 串口设备名通常为 /dev/tty.usbserial-* 格式")
-    print("- 如遇到权限问题，请确保当前用户有串口设备的读写权限")
+    print("- TCP设备名通常为 /dev/tty.usbserial-* 格式")
+    print("- 如遇到权限问题，请确保当前用户有TCP设备的读写权限")
 
 if __name__ == "__main__":
     main()

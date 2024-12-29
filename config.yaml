@@ -5,7 +5,7 @@ tcp:
   connect_timeout: 3.0  # 连接超时时间，单位为秒
   receive_timeout: 2.0  # 接收超时时间，单位为秒
   communication_type: "client"  # 通信类型，client或server
-  response_start_string: "CMD"  # 可选，串口应答的开始字符串，默认为OK
+  response_start_string: "CMD"  # 可选，TCP应答的开始字符串，默认为OK
 
 commands:
   # PWM控制命令

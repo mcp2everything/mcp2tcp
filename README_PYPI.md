@@ -1,4 +1,4 @@
-# MCP2Serial: Bridge between AI Models and Physical World
+# mcp2tcp: Bridge between AI Models and Physical World
 
 Connect AI Large Language Models to hardware devices through the Model Context Protocol (MCP).
 
@@ -18,7 +18,7 @@ Connect AI Large Language Models to hardware devices through the Model Context P
 
 ## Supported Clients
 
-MCP2Serial supports all clients implementing the MCP protocol, including:
+mcp2tcp supports all clients implementing the MCP protocol, including:
 
 - Claude Desktop (Test ok)
 - Continue (Should work)

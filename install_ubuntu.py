@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ====================================================
-# Project: MCP2Serial
+# Project: mcp2tcp
 # Description: Installation script for Ubuntu/Raspberry Pi
 # Repository: https://github.com/mcp2everything/mcp2tcp.git
 # License: MIT License
@@ -46,7 +46,7 @@ def install_uv():
         print(f"Error installing uv: {e}")
         return False
 
-def install_mcp2serial():
+def install_mcp2tcp():
     """Install mcp2tcp package."""
     try:
         # 创建虚拟环境并安装包
@@ -112,7 +112,7 @@ def setup_config():
 
 def main():
     """Main installation process."""
-    print("Starting MCP2Serial installation for Ubuntu/Raspberry Pi...")
+    print("Starting mcp2tcp installation for Ubuntu/Raspberry Pi...")
     
     # 检查Python版本
     if sys.version_info < (3, 11):
@@ -125,8 +125,8 @@ def main():
             print("Failed to install uv package manager")
             sys.exit(1)
     
-    # 安装mcp2serial
-    if not install_mcp2serial():
+    # 安装mcp2tcp
+    if not install_mcp2tcp():
         print("Failed to install mcp2tcp")
         sys.exit(1)
     

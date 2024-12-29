@@ -106,9 +106,9 @@ def check_and_configure_claude():
         }
         with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
-        print("✅ 已添加mcp2serial配置到Claude")
+        print("✅ 已添加mcp2tcp配置到Claude")
     else:
-        print("ℹ️ Claude已配置mcp2serial")
+        print("ℹ️ Claude已配置mcp2tcp")
 
 def check_vscode():
     """检查VSCode安装"""
@@ -128,7 +128,7 @@ def check_vscode():
         print("ℹ️ 未检测到VSCode安装")
 
 def main():
-    print("=== MCP2Serial 安装程序 ===")
+    print("=== mcp2tcp 安装程序 ===")
     
     # 1. 检查操作系统
     system = check_os()
